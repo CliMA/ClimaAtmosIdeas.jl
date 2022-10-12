@@ -1,0 +1,102 @@
+env:
+  JULIA_VERSION: "1.8.1"
+  MPI_IMPL: "openmpi"
+  OPENMPI_VERSION: "4.1.1"
+  CUDA_VERSION: "11.2"
+  OPENBLAS_NUM_THREADS: 1
+  CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
+  BUILDKITE_COMMIT: "${BUILDKITE_COMMIT}"
+  BUILDKITE_BRANCH: "${BUILDKITE_BRANCH}"
+  JULIA_MAX_NUM_PRECOMPILE_FILES: 100
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/cpu"
+
+agents:
+  config: cpu
+  queue: central
+  slurm_ntasks: 1
+
+steps:
+  - label: "init :computer:"
+    key: "init_cpu_env"
+    command:
+      - "echo $$JULIA_DEPOT_PATH"
+
+      - echo "--- Instantiate project"
+      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate test"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path = \".\")'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=test -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate examples"
+      - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=examples -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate perf"
+      - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=perf -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=perf -e 'using Pkg; Pkg.status()'"
+
+    agents:
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_MAX_NUM_PRECOMPILE_FILES: 50
+
+  - wait
+
+  - group: "ClimaAtmosIdeas src unit tests"
+    steps:
+
+      - label: ":computer: domains"
+        command: "julia --color=yes --project=test test/test_domains.jl"
+
+      - label: ":computer: models"
+        command: "julia --color=yes --project=test test/test_models.jl"
+
+  - group: "ClimaAtmosIdeas src integration tests"
+    steps:
+
+      - label: ":computer: 1d_ekman_column regression (Float32)"
+        command: "julia --color=yes --project=test test/run_1d_ekman_column.jl --FT Float32 --test_mode regression"
+
+      - label: ":computer: 1d_ekman_column regression (Float64)"
+        command: "julia --color=yes --project=test test/run_1d_ekman_column.jl --FT Float64 --test_mode regression"
+
+      - label: ":computer: 1d_ekman_column validation"
+        command: "julia --color=yes --project=test test/run_1d_ekman_column.jl --FT Float64 --test_mode validation"
+        artifact_paths: "test/run_1d_ekman_column/*"
+
+      - label: ":computer: 2d_dry_bubble"
+        command: "julia --color=yes --project=test test/run_2d_dry_bubble.jl"
+        artifact_paths: "test/run_2d_dry_bubble/*"
+
+      - label: ":computer: 2d_moist_bubble"
+        command: "julia --color=yes --project=test test/run_2d_moist_bubble.jl"
+        artifact_paths: "test/run_2d_moist_bubble/*"
+
+      - label: ":computer: 2d_precipitating_bubble"
+        command: "julia --color=yes --project=test test/run_2d_precipitating_bubble.jl"
+        artifact_paths: "test/run_2d_precipitating_bubble/*"
+
+      - label: ":computer: 3d_rising_bubble"
+        command: "julia --color=yes --project=test test/run_3d_rising_bubble.jl"
+        artifact_paths: "test/run_3d_rising_bubble/*"
+
+      - label: ":computer: 3d_solid_body_rotation"
+        command: "julia --color=yes --project=test test/run_3d_solid_body_rotation.jl"
+        artifact_paths: "test/run_3d_solid_body_rotation/*"
+
+      - label: ":computer: 3d_balanced_flow"
+        command: "julia --color=yes --project=test test/run_3d_balanced_flow.jl"
+        artifact_paths: "test/run_3d_balanced_flow/*"
+
+      - label: ":computer: 3d_baroclinic_wave"
+        command: "julia --color=yes --project=test test/run_3d_baroclinic_wave.jl"
+        artifact_paths: "test/run_3d_baroclinic_wave/*"
+
